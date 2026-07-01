@@ -1,0 +1,108 @@
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+#include <Stepper.h>
+
+#define PIR_PIN 2
+
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+const int stepsPerRevolution = 2048;
+Stepper myStepper(stepsPerRevolution, 8, 10, 9, 11);
+
+const String correctPassword = "1234";
+String inputPassword = "";
+bool waitingForInput = false;
+int attemptsLeft = 3;
+
+void setup() {
+  Serial.begin(9600);
+  pinMode(PIR_PIN, INPUT);
+
+  lcd.init();
+  lcd.backlight();
+  lcd.setCursor(0, 0);
+  lcd.print("System Ready");
+
+  myStepper.setSpeed(10);
+}
+
+void loop() {
+  if (!waitingForInput && digitalRead(PIR_PIN) == HIGH) {
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Motion Detected");
+    delay(1500);
+
+    attemptsLeft = 3;
+    askPassword();
+  }
+
+  if (waitingForInput && Serial.available()) {
+    char c = Serial.read();
+
+    if (isPrintable(c)) {
+      inputPassword += c;
+      lcd.setCursor(0, 1);
+      lcd.print(inputPassword);
+
+      if (inputPassword.length() == 4) {
+        checkPassword();
+      }
+    }
+  }
+}
+
+void askPassword() {
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Enter Password:");
+  lcd.setCursor(0, 1);
+  inputPassword = "";
+  waitingForInput = true;
+}
+
+void checkPassword() {
+  delay(500);
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Checking...");
+  delay(1000);
+
+  if (inputPassword == correctPassword) {
+    lcd.clear();
+    lcd.print("Access Granted");
+    waitingForInput = false;
+    delay(2000);
+    openDoor();
+  } else {
+    attemptsLeft--;
+    if (attemptsLeft > 0) {
+      lcd.clear();
+      lcd.setCursor(0, 0);
+      lcd.print("Wrong! Try again");
+      delay(2000);
+      askPassword();
+    } else {
+      lcd.clear();
+      lcd.setCursor(0, 0);
+      lcd.print("Burglar Detected!");
+      lcd.setCursor(0, 1);
+      lcd.print("Access Denied");
+      waitingForInput = false;
+      delay(4000);
+      lcd.clear();
+      lcd.print("System Ready");
+    }
+  }
+}
+
+void openDoor() {
+  myStepper.step(stepsPerRevolution * 2);  // 720°
+  delay(20000);  // Wait 20 seconds
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Locking Door...");
+  myStepper.step(-stepsPerRevolution * 2); // back
+  delay(2000);
+  lcd.clear();
+  lcd.print("System Ready");
+}
